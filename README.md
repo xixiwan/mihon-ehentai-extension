@@ -5,7 +5,7 @@ A [Mihon](https://mihon.app) (Tachiyomi fork) catalogue source for
 sources" option enabled.
 
 - 语言/Language: `en` · 内容/Content: **NSFW (nsfw = 1)**
-- APK: `tachiyomi-en.ehentai-v1.4.4.apk`（`ehentai/build/outputs/apk/release/`）
+- APK: `tachiyomi-en.ehentai-v1.4.5.apk`（`ehentai/build/outputs/apk/release/`）
 - 基于 extensions-lib **1.4**（经典 Observable API）——兼容 Mihon（1.4/1.6 均支持）、
   Tachimanga 及其他旧版 Tachiyomi 分支；若用 1.6 suspend API 构建，在其他程序会报
   `java.lang.VerifyError`
@@ -16,7 +16,7 @@ sources" option enabled.
 |---|---|
 | 热门画廊 Popular | `GET /popular`，单页无分页 |
 | 搜索 Search | 关键词 + 高级筛选（分类/最低评分/语言/页数范围/包含已删除/要求种子） |
-| 画廊详情 | 标题（`#gn`/`#gj`）、封面、上传者、标签（genre）、描述、发布日期 |
+| 画廊详情 | 标题（`#gn`/`#gj`，默认跟随列表显示的那种，可在偏好里强制）、封面、上传者、标签（genre）、描述、发布日期 |
 | 章节 | 一个画廊 = 单个 `Full Gallery` 章节（`chapter_number = 1`，`date_upload` = 发布于时间） |
 | 阅读/下载 | 惰性解析图片地址（单页 ≈ 1 次查看页请求 + 1 次图片请求）；支持 >20 页大画廊（`?p=N` 翻页收集） |
 | 原图 | 查看页 `/fullimg/` 链接，需要有效登录 Cookie，失败自动回退标准图 |
@@ -25,7 +25,7 @@ sources" option enabled.
 
 ## 安装 (Install)
 
-1. 构建出 APK（见下），或直接使用 `ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.4.apk`。
+1. 构建出 APK（见下），或直接使用 `ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.5.apk`。
 2. Mihon → 设置 (Settings) → 扩展 (Extensions) → 右上角 `+` → **本地安装 (Local install)** → 选择 APK。
 3. 扩展列表出现 **E-Hentai (EN)**。因为 APK 是 debug 签名、不在 Mihon 的信任签名列表里，
    它会显示为「未信任」——**点击该扩展并确认信任**即可（仅首次）。
@@ -48,9 +48,16 @@ sources" option enabled.
    （v1.4.3 起登录 Cookie 拆分为以上三项分别输入；旧版整串 Cookie 会在首次使用时自动迁移。）
    **敏感信息仅存本机 SharedPreferences，不会出现在日志或网络请求之外**（拦截器只对 e-hentai.org / exhentai.org 域名附加）；
 6. **User-Agent** — 默认浏览器 UA；被 Cloudflare 拦截（403/503）时可更换；
-7. **图片质量** — 标准图（默认）/ 原图（需有效 Cookie）；
-8. **预解析图片地址** — 默认关；开启后进入阅读前即解析全部图片（大画廊变慢）；
-9. **请求间隔** — 页面类请求节流，默认无。
+7. **标题语言** — 详情页/书库用哪种标题：
+   - 跟随列表（默认）—— 与搜索/热门列表里显示的那种一致；
+   - 英文标题（`#gn`）/ 日语标题（`#gj`）—— 强制指定。
+
+   > 这一项只决定**详情页与书库**的标题。搜索列表显示英文还是日文由站点按**账号设置**渲染，
+   > 插件无法通过请求参数改变它（站点搜索参数里没有控制标题语言的项）。
+   > 想让列表也是日语，请在 e-hentai 账号设置里打开「日语标题」，然后保持「跟随列表」即可两处一致。
+8. **图片质量** — 标准图（默认）/ 原图（需有效 Cookie）；
+9. **预解析图片地址** — 默认关；开启后进入阅读前即解析全部图片（大画廊变慢）；
+10. **请求间隔** — 页面类请求节流，默认无。
 
 ## 构建 (Build)
 
@@ -63,7 +70,7 @@ sources" option enabled.
 
 ```bash
 ./gradlew :ehentai:assembleRelease
-# 产物：ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.4.apk
+# 产物：ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.5.apk
 ```
 
 运行解析/筛选单元测试（使用实测保存的 HTML 快照，离线可跑）：

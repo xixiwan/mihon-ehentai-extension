@@ -15,6 +15,8 @@ import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_LINK_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_ROW_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_TAGS_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_TITLE_SELECTOR
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_EN
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_LIST
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.VIEWER_IMAGE
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.VIEWER_ORIGINAL_LINK
 import eu.kanade.tachiyomi.source.model.SManga
@@ -87,11 +89,27 @@ fun hasNextPage(html: String): Boolean = !parseNextUrl(html).isNullOrEmpty()
 // Gallery detail page
 // ---------------------------------------------------------------------------
 
-/** Fills [manga] with the gallery page's metadata (title, cover, uploader, tags, …). */
-fun parseGalleryDetails(doc: Document, manga: SManga): SManga {
+/**
+ * Fills [manga] with the gallery page's metadata (title, cover, uploader, tags, …).
+ *
+ * [listTitle] is the title the results list showed for this gallery. The gallery
+ * page carries both the English `#gn` and the Japanese `#gj` heading, while a row
+ * shows only the one the site renders for the account, so the list decides which
+ * heading the entry gets (issue #4). Without it — the entry is opened from the
+ * library or by a deep link — the English heading wins, as in 1.4.4.
+ *
+ * [language] is the 标题语言 preference: [TITLE_LANGUAGE_LIST] follows [listTitle],
+ * anything else forces that heading.
+ */
+fun parseGalleryDetails(
+    doc: Document,
+    manga: SManga,
+    listTitle: String? = null,
+    language: String = TITLE_LANGUAGE_LIST,
+): SManga {
     val titleEn = doc.selectFirst(GALLERY_TITLE_EN)?.text()
     val titleJp = doc.selectFirst(GALLERY_TITLE_JP)?.text()
-    manga.title = titleEn ?: titleJp ?: manga.title
+    manga.title = pickGalleryTitle(titleEn, titleJp, listTitle, language) ?: manga.title
     manga.thumbnail_url = parseGalleryCover(doc) ?: manga.thumbnail_url
     manga.author = parseUploader(doc)
     manga.genre = parseTags(doc)
@@ -100,6 +118,34 @@ fun parseGalleryDetails(doc: Document, manga: SManga): SManga {
     manga.initialized = true
     return manga
 }
+
+/**
+ * Heading of the gallery page to use as the entry title.
+ *
+ * [language] forces a heading; [TITLE_LANGUAGE_LIST] (the default) instead picks
+ * the one [listTitle] corresponds to, so that the detail page agrees with the
+ * list it was opened from (issue #4). Falls back to the English heading.
+ */
+private fun pickGalleryTitle(titleEn: String?, titleJp: String?, listTitle: String?, language: String): String? {
+    val en = titleEn?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() }
+    val jp = titleJp?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() }
+    if (language != TITLE_LANGUAGE_LIST) {
+        return if (language == TITLE_LANGUAGE_EN) en ?: jp else jp ?: en
+    }
+    val listed = listTitle?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() }
+    if (listed == null) return en ?: jp
+    if (jp != null && sameTitle(listed, jp)) return jp
+    if (en != null && sameTitle(listed, en)) return en
+    return en ?: jp
+}
+
+/** Collapses whitespace (including `&nbsp;`) so two renderings of a title compare equal. */
+private fun normalizeTitle(text: String): String =
+    text.replace('\u00a0', ' ').replace(Regex("\\s+"), " ").trim()
+
+/** True when the listed title is this heading, possibly with decoration around it. */
+private fun sameTitle(listed: String, heading: String): Boolean =
+    listed == heading || listed.contains(heading) || heading.contains(listed)
 
 /**
  * Cover of the gallery page. The new layout uses a CSS background image

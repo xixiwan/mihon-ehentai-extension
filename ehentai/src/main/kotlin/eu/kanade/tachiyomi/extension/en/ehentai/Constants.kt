@@ -35,6 +35,7 @@ object Constants {
     const val PREF_IMAGE_QUALITY = "image_quality"
     const val PREF_PRE_RESOLVE_IMAGES = "pre_resolve_images"
     const val PREF_REQUEST_INTERVAL = "request_interval"
+    const val PREF_TITLE_LANGUAGE = "title_language"
 
     // Domain preference values
     const val DOMAIN_EHENTAI = "e-hentai.org"
@@ -44,6 +45,20 @@ object Constants {
     // Image quality preference values
     const val QUALITY_STANDARD = "standard"
     const val QUALITY_ORIGINAL = "original"
+
+    // ------------------------------------------------------------------
+    // Title-language preference values (which heading of the gallery page
+    // becomes the entry title). The gallery page carries the English `#gn`
+    // and the Japanese `#gj` heading; a results row shows only the one the
+    // site renders for the account, and which one that is cannot be
+    // requested — it is an account setting on the site.
+    //
+    // LIST (the default) keeps the entry in the language the row showed, so
+    // the detail page agrees with the list it was opened from.
+    // ------------------------------------------------------------------
+    const val TITLE_LANGUAGE_LIST = "list"
+    const val TITLE_LANGUAGE_EN = "en"
+    const val TITLE_LANGUAGE_JP = "jp"
 
     // ------------------------------------------------------------------
     // Category bitmasks used by the `f_cats` search parameter.

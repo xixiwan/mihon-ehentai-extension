@@ -70,6 +70,33 @@ class Ehentai : HttpSource(), ConfigurableSource {
     /** Cursor of the next results page, keyed by the requested search URL. */
     private val nextPageCursors = ConcurrentHashMap<String, String>()
 
+    /**
+     * URL requested for a page of a search, so its cursor can be found afterwards.
+     *
+     * The site ignores `page=N`, so page N+1 is requested with the cursor that
+     * page N carried — and page N's URL is only known here, on the request side.
+     * Looking the cursor up under the page-1 URL instead (1.4.4) made every page
+     * from the third repeat the second one.
+     */
+    private data class RequestedPage(val searchUrl: String, val url: String)
+
+    private val requestedPages = ConcurrentHashMap<Int, RequestedPage>()
+
+    /**
+     * Title each list row showed, keyed by `/g/<id>/<hash>/`.
+     *
+     * A gallery page carries both the English `#gn` and the Japanese `#gj`
+     * heading, while a row only shows the one the site renders for the account,
+     * so the detail page matches the list it was opened from (issue #4).
+     */
+    private val listTitles = ConcurrentHashMap<String, String>()
+
+    /** `/g/<id>/<hash>/` of a gallery URL: the same key for a row URL and for the page URL. */
+    private fun galleryKey(url: String): String {
+        val start = url.indexOf("/g/")
+        return if (start >= 0) url.substring(start) else url
+    }
+
     /** Timestamp of the last page-type request, for the request-interval preference. */
     private val lastPageRequestAt = AtomicLong(0L)
 
@@ -83,6 +110,7 @@ class Ehentai : HttpSource(), ConfigurableSource {
         val url = response.request.url.toString()
         val html = response.body.string()
         val mangas = parseMangaList(Jsoup.parse(html, url)).onEach { it.setUrlWithoutDomain(it.url) }
+        mangas.forEach { listTitles[galleryKey(it.url)] = it.title }
         return MangasPage(mangas, false)
     }
 
@@ -98,7 +126,16 @@ class Ehentai : HttpSource(), ConfigurableSource {
         if (query.isBlank() && filters.hasNoActiveFilters()) {
             return popularMangaRequest(page)
         }
-        val url = if (page <= 1) searchUrl else nextPageCursors[searchUrl] ?: searchUrl
+        val url = if (page <= 1) {
+            searchUrl
+        } else {
+            requestedPages[page - 1]
+                ?.takeIf { it.searchUrl == searchUrl }
+                ?.url
+                ?.let { nextPageCursors[it] }
+                ?: searchUrl
+        }
+        requestedPages[page] = RequestedPage(searchUrl, url)
         return GET(url, pageHeaders())
     }
 
@@ -112,6 +149,7 @@ class Ehentai : HttpSource(), ConfigurableSource {
             nextPageCursors.remove(url)
         }
         val mangas = parseMangaList(Jsoup.parse(html, url)).onEach { it.setUrlWithoutDomain(it.url) }
+        mangas.forEach { listTitles[galleryKey(it.url)] = it.title }
         return MangasPage(mangas, hasNextPage(html))
     }
 
@@ -129,7 +167,8 @@ class Ehentai : HttpSource(), ConfigurableSource {
 
     override fun mangaDetailsParse(response: Response): SManga {
         val url = response.request.url.toString()
-        return parseGalleryDetails(Jsoup.parse(response.body.string(), url), SManga.create())
+        val doc = Jsoup.parse(response.body.string(), url)
+        return parseGalleryDetails(doc, SManga.create(), listTitles[galleryKey(url)], prefs.titleLanguage)
     }
 
     override fun chapterListParse(response: Response): List<SChapter> {

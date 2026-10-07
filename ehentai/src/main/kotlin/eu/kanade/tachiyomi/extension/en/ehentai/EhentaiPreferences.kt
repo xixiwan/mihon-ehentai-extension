@@ -23,6 +23,10 @@ import eu.kanade.tachiyomi.extension.en.ehentai.Constants.PREF_REQUEST_INTERVAL
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.PREF_USER_AGENT
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.QUALITY_ORIGINAL
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.QUALITY_STANDARD
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.PREF_TITLE_LANGUAGE
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_EN
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_JP
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_LIST
 
 /**
  * Thin wrapper over the source-scoped [SharedPreferences].
@@ -113,6 +117,14 @@ class EhentaiPreferences(private val preferences: SharedPreferences) {
     val preResolveImages: Boolean
         get() = preferences.getBoolean(PREF_PRE_RESOLVE_IMAGES, false)
 
+    /**
+     * Which heading of the gallery page becomes the entry title (详情页/书库标题):
+     * [TITLE_LANGUAGE_LIST] follows the language the results row showed,
+     * [TITLE_LANGUAGE_EN] / [TITLE_LANGUAGE_JP] force one.
+     */
+    val titleLanguage: String
+        get() = preferences.getString(PREF_TITLE_LANGUAGE, TITLE_LANGUAGE_LIST) ?: TITLE_LANGUAGE_LIST
+
     /** Delay between page-type requests (list / gallery / viewer), 0 = disabled. */
     val requestIntervalMs: Long
         get() = preferences.getString(PREF_REQUEST_INTERVAL, "0")?.toLongOrNull() ?: 0L
@@ -175,6 +187,16 @@ class EhentaiPreferences(private val preferences: SharedPreferences) {
             summary = "默认使用浏览器 UA；若被 Cloudflare 拦截（403/503）可尝试更换"
             dialogTitle = "User-Agent"
             setDefaultValue(DEFAULT_USER_AGENT)
+        }.let { screen.addPreference(it) }
+
+        ListPreference(context).apply {
+            key = PREF_TITLE_LANGUAGE
+            title = "标题语言 (Title language)"
+            summary = "详情页与书库用哪种标题：默认跟随搜索列表里显示的那种；也可强制英文或日语。" +
+                "搜索列表本身由站点按账号设置渲染，插件改不了它"
+            entries = arrayOf("跟随列表（默认）", "英文标题（#gn）", "日语标题（#gj）")
+            entryValues = arrayOf(TITLE_LANGUAGE_LIST, TITLE_LANGUAGE_EN, TITLE_LANGUAGE_JP)
+            setDefaultValue(TITLE_LANGUAGE_LIST)
         }.let { screen.addPreference(it) }
 
         ListPreference(context).apply {

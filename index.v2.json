@@ -12,12 +12,12 @@
         "name": "E-Hentai",
         "packageName": "eu.kanade.tachiyomi.extension.en.ehentai",
         "resources": {
-          "apkUrl": "https://github.com/xixiwan/mihon-ehentai-extension/releases/download/v1.4.4/tachiyomi-en.ehentai-v1.4.4.apk",
+          "apkUrl": "https://github.com/xixiwan/mihon-ehentai-extension/releases/download/v1.4.5/tachiyomi-en.ehentai-v1.4.5.apk",
           "iconUrl": "https://raw.githubusercontent.com/xixiwan/mihon-ehentai-extension/main/icon/eu.kanade.tachiyomi.extension.en.ehentai.png"
         },
         "extensionLib": "1.4",
-        "versionCode": 4,
-        "versionName": "1.4.4",
+        "versionCode": 5,
+        "versionName": "1.4.5",
         "contentWarning": "CONTENT_WARNING_NSFW",
         "sources": [
           {
