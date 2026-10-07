@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.en.ehentai
 
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_JP
 import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,6 +20,20 @@ class EhentaiParsersTest {
 
     private fun html(name: String): String =
         File("src/test/resources/$name").readText()
+
+    /**
+     * Minimal gallery page: `#gd2` holds the two headings and, when given, the
+     * gallery's own description text — the shape the real snapshots have.
+     */
+    private fun galleryDoc(
+        titleEn: String = "[PRESTIGE COMIC (Gunkan Amaebi) ] oshikake! Hatsujō shisutāzu",
+        titleJp: String = "[プレステージ出版(軍艦あまえび )]おしかけ！発情シスターズ",
+        description: String? = null,
+    ) = Jsoup.parse(
+        "<div id=\"gd2\"><h1 id=\"gn\">$titleEn</h1><h1 id=\"gj\">$titleJp</h1>" +
+            (description ?: "") + "</div>",
+        "https://e-hentai.org/",
+    )
 
     // ------------------------------------------------------------------
     // List pages
@@ -99,9 +114,40 @@ class EhentaiParsersTest {
     }
 
     @Test
-    fun `parseGalleryDetails - description is empty for galleries without one`() {
+    fun `parseGalleryDetails - the other heading is put in front of the description`() {
         val manga = TestManga()
         parseGalleryDetails(doc("gallery.html"), manga)
+
+        // gallery.html carries no description of its own, so the heading is all of it
+        assertEquals(
+            "其他语言标题：[プレステージ出版(軍艦あまえび )]おしかけ！発情シスターズ",
+            manga.description,
+        )
+    }
+
+    @Test
+    fun `parseGalleryDetails - the subtitle is the heading the entry did not take`() {
+        val manga = TestManga()
+        parseGalleryDetails(doc("gallery.html"), manga, null, TITLE_LANGUAGE_JP)
+
+        assertTrue(manga.title.startsWith("[プレステージ出版"))
+        assertTrue(manga.description.orEmpty().startsWith("其他语言标题：[PRESTIGE COMIC"))
+    }
+
+    @Test
+    fun `parseGalleryDetails - the gallery's own text follows the subtitle`() {
+        val manga = TestManga()
+        val d = galleryDoc(titleEn = "English title", titleJp = "日本語のタイトル", description = "テスト用の説明")
+        parseGalleryDetails(d, manga)
+
+        assertEquals("其他语言标题：日本語のタイトル\n\nテスト用の説明", manga.description)
+    }
+
+    @Test
+    fun `parseGalleryDetails - no subtitle when both headings are the same`() {
+        val manga = TestManga()
+        parseGalleryDetails(galleryDoc(titleEn = "Same title", titleJp = "Same title"), manga)
+
         assertNull(manga.description)
     }
 

@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_LINK_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_ROW_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_TAGS_SELECTOR
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.LIST_TITLE_SELECTOR
+import eu.kanade.tachiyomi.extension.en.ehentai.Constants.SUBTITLE_LABEL
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_EN
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.TITLE_LANGUAGE_LIST
 import eu.kanade.tachiyomi.extension.en.ehentai.Constants.VIEWER_IMAGE
@@ -99,7 +100,8 @@ fun hasNextPage(html: String): Boolean = !parseNextUrl(html).isNullOrEmpty()
  * library or by a deep link — the English heading wins, as in 1.4.4.
  *
  * [language] is the 标题语言 preference: [TITLE_LANGUAGE_LIST] follows [listTitle],
- * anything else forces that heading.
+ * anything else forces that heading. The heading the entry did not take ends up in
+ * the description (see [otherGalleryTitle]).
  */
 fun parseGalleryDetails(
     doc: Document,
@@ -109,11 +111,12 @@ fun parseGalleryDetails(
 ): SManga {
     val titleEn = doc.selectFirst(GALLERY_TITLE_EN)?.text()
     val titleJp = doc.selectFirst(GALLERY_TITLE_JP)?.text()
-    manga.title = pickGalleryTitle(titleEn, titleJp, listTitle, language) ?: manga.title
+    val title = pickGalleryTitle(titleEn, titleJp, listTitle, language)
+    manga.title = title ?: manga.title
     manga.thumbnail_url = parseGalleryCover(doc) ?: manga.thumbnail_url
     manga.author = parseUploader(doc)
     manga.genre = parseTags(doc)
-    manga.description = parseDescription(doc)
+    manga.description = withSubtitle(otherGalleryTitle(title, titleEn, titleJp), parseDescription(doc))
     manga.status = SManga.UNKNOWN
     manga.initialized = true
     return manga
@@ -146,6 +149,35 @@ private fun normalizeTitle(text: String): String =
 /** True when the listed title is this heading, possibly with decoration around it. */
 private fun sameTitle(listed: String, heading: String): Boolean =
     listed == heading || listed.contains(heading) || heading.contains(listed)
+
+/**
+ * Heading the entry did not take as its title, or null when the page carries only
+ * one title (or two identical ones).
+ */
+private fun otherGalleryTitle(title: String?, titleEn: String?, titleJp: String?): String? {
+    val chosen = title?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() } ?: return null
+    val jp = titleJp?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() }
+    val en = titleEn?.let { normalizeTitle(it) }?.takeIf { it.isNotEmpty() }
+    return when {
+        jp != null && jp != chosen -> jp
+        en != null && en != chosen -> en
+        else -> null
+    }
+}
+
+/**
+ * Puts the other heading in front of the description as its own paragraph.
+ *
+ * A gallery page shows both the English and the Japanese title while the entry can
+ * only carry one, and the library search matches the description, so keeping the
+ * second heading there makes it readable and searchable (issue #4). A paragraph
+ * break keeps the gallery's own text apart, in plain text and Markdown alike.
+ */
+private fun withSubtitle(subtitle: String?, description: String?): String? = when {
+    subtitle == null -> description
+    description == null -> SUBTITLE_LABEL + subtitle
+    else -> SUBTITLE_LABEL + subtitle + "\n\n" + description
+}
 
 /**
  * Cover of the gallery page. The new layout uses a CSS background image

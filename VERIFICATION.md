@@ -58,7 +58,8 @@
 - `nexturl` 保留全部筛选参数并追加 `next=<gid>`（实测 `f_srdd/f_spf/f_spt/f_cats`
   全部保留）；末页 `nexturl=""`。
 - 实现：`hasNextPage` = `nexturl` 非空；下一页请求直接用上一页的 `nexturl`
-  （`Ehentai.kt` 内 `nextPageCursors` 按搜索 URL 缓存游标）。
+  （`Ehentai.kt` 内 `requestedPages` 记录「第 N 页实际请求的 URL」，再用 `nextPageCursors`
+  按该 URL 取游标——站点只给「当前页 → 下一页」的相对游标，按页记账才不会在第 3 页起重复第 2 页）。
 
 ## 3. 画廊详情页 `/g/{gid}/{token}/`
 
@@ -66,13 +67,13 @@
 
 | 数据 | 实测选择器/位置 | 与旧文档差异 |
 |---|---|---|
-| 英文标题 | `h1#gn`（`#gj` 为日文标题，作为回退） | `#gd2` 现在**包含** `#gn`/`#gj` 两个 h1 |
+| 英文标题 | `h1#gn`（`#gj` 为日文标题） | `#gd2` 现在**包含** `#gn`/`#gj` 两个 h1；两个标题都在用：主标题按「标题语言」偏好（默认跟随列表显示的那个），另一个以「其他语言标题：…」写进简介 |
 | 封面 | `#gd1` 内 `div[style*="url(...)"]` CSS 背景图，正则 `url\((https?://[^)]+)\)` | **不再是 `<img>`**（旧 `img#cover` 已不存在） |
 | 元数据 | `#gdd table tr`：`td.gdt1`=字段名，`td.gdt2`=值（Posted / Parent / Visible / Language / File Size / Length / Favorited） | Category/Uploader/Rating 已不在该表内；Rating 在 `#gdr` |
 | 上传者 | `#gdn a[href*="/uploader/"]` 文本 | — |
 | 分类 | `#gdc` 文本（如 "Doujinshi"） | — |
 | 标签 | `#taglist table tr`：`td.tc`=命名空间（含尾冒号），同行 `td:eq(1) a`=标签 | 结构保留 |
-| 描述 | `#gd2` 全文去掉 `#gn`/`#gj` 文本；无描述时为 null | 多数画廊无描述 |
+| 描述 | `#gd2` 全文去掉 `#gn`/`#gj` 文本；再在最前面加一行「其他语言标题：…」（没被选中的那个标题；只有一个标题或两者相同时不加） | 多数画廊无描述，此时简介就是这一行 |
 | 缩略图 | `#gdt a[href*="/s/"]`，查看页 URL 形如 `/s/{hash}/{gid}-{n}` | 旧 `div.gdtm` 包裹已不存在 |
 | 缩略图分页 | `?p=N`，**每页 20 张**（`p.gpc`：「Showing 1 - 20 of 27 images」） | 旧版 40 张/页 |
 | 页数 | `Length` 元数据「27 pages」；回退 `p.gpc` 的 `of N images` | — |

@@ -60,6 +60,14 @@ object Constants {
     const val TITLE_LANGUAGE_EN = "en"
     const val TITLE_LANGUAGE_JP = "jp"
 
+    /**
+     * Label in front of the heading that did not become the entry title; that
+     * heading is put into the description, where the library search finds it
+     * (issue #4). Plain text on purpose — older clients render the description as
+     * plain text, where Markdown markup would show up literally.
+     */
+    const val SUBTITLE_LABEL = "其他语言标题："
+
     // ------------------------------------------------------------------
     // Category bitmasks used by the `f_cats` search parameter.
     //
