@@ -5,10 +5,21 @@ A [Mihon](https://mihon.app) (Tachiyomi fork) catalogue source for
 sources" option enabled.
 
 - 语言/Language: `en` · 内容/Content: **NSFW (nsfw = 1)**
-- APK: `tachiyomi-en.ehentai-v1.4.6.apk`（`ehentai/build/outputs/apk/release/`）
-- 基于 extensions-lib **1.4**（经典 Observable API）——兼容 Mihon（1.4/1.6 均支持）、
-  Tachimanga 及其他旧版 Tachiyomi 分支；若用 1.6 suspend API 构建，在其他程序会报
-  `java.lang.VerifyError`
+- 两个构建，可并存，按你的应用版本选一个（详见 [`MIHON-0.21.md`](MIHON-0.21.md)）：
+
+  | | 1.4 版 | 1.6 版 |
+  |---|---|---|
+  | APK | `apk/tachiyomi-en.ehentai-v1.4.6.apk` | `apk/tachiyomi-en.ehentai-v1.6.0.apk` |
+  | 包名 | `…en.ehentai` | `…en.ehentai.v16` |
+  | extensions-lib | **1.4**（经典 Observable API） | **1.6**（suspend API） |
+  | 适用 | Mihon、Tachimanga、旧 Tachiyomi 分支 | 仅 Mihon 0.20+ |
+
+  两个 APK 用同一把 `keystore/debug.keystore` 签名，所以仓库里公布的那一个签名指纹对两者都成立；
+  源 id 也相同（换版本后书库条目、Cookie 偏好都还在）。
+
+> **Mihon 0.21 装不上扩展的原因与修复**：0.21 起「安装/信任」都要求 APK 签名等于仓库公布的
+> `signingKey`，而本仓库这两个字段原本是空字符串。已修正 `index.v2.json` / `repo.json`，
+> 细节与发布清单见 [`MIHON-0.21.md`](MIHON-0.21.md)。
 
 ## 功能 (Features)
 
@@ -25,16 +36,21 @@ sources" option enabled.
 
 ## 安装 (Install)
 
-1. 构建出 APK（见下），或直接使用 `ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.6.apk`。
-2. Mihon → 设置 (Settings) → 扩展 (Extensions) → 右上角 `+` → **本地安装 (Local install)** → 选择 APK。
-3. 扩展列表出现 **E-Hentai (EN)**。因为 APK 是 debug 签名、不在 Mihon 的信任签名列表里，
-   它会显示为「未信任」——**点击该扩展并确认信任**即可（仅首次）。
-4. 若列表里看不到：检查 设置 → 浏览 → 「显示 NSFW 源」已开启（默认开启）。
-5. 完成后在 浏览 页选择 **E-Hentai (EN)** 源即可使用。
+Mihon 0.20+ / Tachimanga 都只从**扩展仓库**安装（0.20.4 起扩展页已经没有「本地安装」入口）：
 
-> 也可以把本仓库作为扩展仓库（`index.min.json` + `repo.json`/`index.v2.json` + `apk/` + `icon/` 已附带）
-> 添加。仓库地址（Mihon/Tachimanga 均可用）：
-> `https://raw.githubusercontent.com/xixiwan/mihon-ehentai-extension/main/index.min.json`
+1. 设置 → 浏览 → 内容警告：打开 **NSFW**。本扩展是 NSFW，不开这一项列表里就看不到它（0.21 起会把
+   未启用的内容警告过滤掉）。
+2. 扩展 → 右上角 `+` → 添加仓库：
+   `https://raw.githubusercontent.com/xixiwan/mihon-ehentai-extension/main/index.min.json`
+   （Mihon 0.21 读到 `index.min.json` 后会自动跟到 `repo.json` → `index.v2.json`；Tachimanga 直接读 `index.min.json`）
+3. 列表里会出现两条，装**与你应用匹配的那一条**：
+   - `E-Hentai (1.4)` —— Mihon / Tachimanga / 旧分支通用；
+   - `E-Hentai (1.6)` —— 仅 Mihon 0.20+（suspend API）。
+4. 装完即信任：APK 签名与仓库公布的 `signingKey` 一致，不再需要逐个点「信任」。
+5. 浏览 → 源列表里出现 **E-Hentai (EN)** 即可使用。
+
+> 在同一个应用里两个版本**装一个就够**（功能相同、源 id 相同，只是扩展列表里会看到两条）。
+> Tachimanga 请装 1.4 版：1.6 版用的是它不认识的 suspend API。
 
 ## 偏好设置 (Preferences)
 
@@ -65,29 +81,44 @@ sources" option enabled.
 
 ## 构建 (Build)
 
+### 离线构建（本机可用，推荐；不联网）
+
+本工作区没有外网，Gradle 拿不到 JitPack/Google/Maven 上的依赖，所以两个 APK 都由
+`offline/` 下的一组脚本直接调用「Android SDK build-tools + 本地缓存里的 Kotlin 编译器」产出，
+依赖 jar 在 `offline/libs/`（都是 compileOnly，不打进 APK）：
+
+```powershell
+pwsh -NoProfile -File offline\build-api16.ps1   # 用 mihon-0.21.2 源码编出 extensions-lib 1.6 的编译期 API
+pwsh -NoProfile -File offline\build-v14.ps1     # 1.4 版 -> apk/tachiyomi-en.ehentai-v1.4.6.apk
+pwsh -NoProfile -File offline\build-v16.ps1     # 1.6 版 -> apk/tachiyomi-en.ehentai-v1.6.0.apk
+pwsh -NoProfile -File offline\verify-repo.ps1   # 校验签名指纹 + 三个索引与 APK 是否一致
+```
+
+两个 APK 都用 `keystore/debug.keystore` 签名（v1+v2），所以仓库里公布的**同一个**签名指纹对两者都成立。
+
+### Gradle（需要网络）
+
+```bash
+./gradlew :ehentai:assembleRelease      # 1.4 版
+./gradlew :ehentai-v16:assembleRelease  # 1.6 版（extensions-lib 1.6 由 JitPack 提供）
+./gradlew :ehentai:testDebugUnitTest    # 解析/筛选单测（离线可跑）
+```
+
 环境要求：
 
 - JDK 17+（本工程在 JDK 25 上验证）
 - Android SDK（`compileSdk 36`、`minSdk 21`、build-tools 36；`local.properties` 或 `ANDROID_HOME` 指定 SDK 路径）
-- 网络能访问 `google()` / `mavenCentral()` / `jitpack.io`（依赖 `com.github.tachiyomiorg:extensions-lib` 由 JitPack 构建，首次较慢）
+- 网络能访问 `google()` / `mavenCentral()` / `jitpack.io`
 - 国内网络不可直连时请配置代理：`GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890"`
-
-```bash
-./gradlew :ehentai:assembleRelease
-# 产物：ehentai/build/outputs/apk/release/tachiyomi-en.ehentai-v1.4.6.apk
-```
-
-运行解析/筛选单元测试（使用实测保存的 HTML 快照，离线可跑）：
-
-```bash
-./gradlew :ehentai:testDebugUnitTest
-```
 
 > 本仓库构建时用 `GRADLE_USER_HOME=<项目根>/.gradle-home` 把 Gradle 缓存留在项目内，并把调试签名密钥放在
 > `keystore/debug.keystore`（仅用于本地安装；发布扩展仓库时应换成正式签名）。
 
 ## 已知限制 (Known limitations)
 
+- **1.4 / 1.6 两个构建共用同一个源 id**：换版本后书库与偏好都还在，但**同一个应用里两个都装**时
+  它们是同一个源的两种实现，装一个就够（扩展列表里会出现 `E-Hentai` 与 `E-Hentai (1.6)` 两条）。
+- **Tachimanga 只能装 1.6 之前的构建**：它不认识 extensions-lib 1.6 的 suspend API，加载 1.6 版会 `VerifyError`。
 - **Cloudflare**：对数据中心 IP / 异常 UA 会返回 403/503；遇到时先换 UA 偏好，或检查网络环境（部分地区需代理访问）。
 - **exhentai.org 必须登录 Cookie**，未填写时给出明确报错（而不是裸 403）；原图同样依赖登录态。
 - **图片 CDN 校验 Referer**：图片请求带查看页 Referer；图片 URL 带 `keystamp` 时效参数，过期（通常几小时）后需重新解析，属站点正常行为。
@@ -101,14 +132,23 @@ sources" option enabled.
 ## 代码结构
 
 ```
-ehentai/src/main/kotlin/eu/kanade/tachiyomi/extension/en/ehentai/
-├── Ehentai.kt            # 主类（HttpSource + ConfigurableSource，Observable 写法，lib 1.4 兼容 API）
+ehentai/src/main/kotlin/eu/kanade/tachiyomi/extension/en/ehentai/   # 与版本无关的站点逻辑（两个构建共用）
+├── Ehentai.kt            # 1.4 主类（HttpSource + ConfigurableSource，Observable 写法）
 ├── EhentaiParsers.kt     # 纯解析函数（Jsoup），可单测
 ├── EhentaiFilters.kt     # 筛选定义 + buildSearchParams 纯函数
 ├── EhentaiPreferences.kt # 偏好读写 + setupPreferenceScreen
 ├── EhentaiInterceptor.kt # UA / 登录 Cookie 拦截器（仅本站域名）
 └── Constants.kt          # 域名/偏好键/分类位掩码/选择器集中管理
+
+ehentai-v16/src/main/kotlin/eu/kanade/tachiyomi/extension/en/ehentai/v16/
+└── Ehentai.kt            # 1.6 主类（suspend API 接线；上面那批文件原样复用，只排除 1.4 主类）
+
+offline/                  # 不联网的构建与校验脚本（见「构建」）
 ```
+
+1.6 版把每个 1.4 的 `xxxRequest/xxxParse` 对接到 `suspend` 接口（`getPopularManga` /
+`getSearchManga` / `getMangaUpdate` / `getPageList` / `getImageUrl`），解析、筛选、偏好、拦截器
+一行都没复制；站点改版仍然只改 `Constants.kt` + `EhentaiParsers.kt`。
 
 ## 站点实测记录
 

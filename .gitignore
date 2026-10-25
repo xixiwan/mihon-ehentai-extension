@@ -9,3 +9,14 @@ keystore/
 # AI 辅助开发记录（不发布）
 PROMPT.md
 SELF-TEST.md
+
+# 本地参考物料（不发布）
+_mihon/
+_ref/
+.sim-p1/
+.codegraph/
+mihon-*.zip
+
+# 离线构建中间产物
+offline/build/
+*.idsig

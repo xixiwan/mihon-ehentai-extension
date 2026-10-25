@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  1.6 ("tachiyomix") build of the E-Hentai extension, for Mihon 0.20+ / 0.21+.
+
+  Differences from the 1.4 build in :ehentai:
+  - implemented against the suspend API (Source.getPopularManga, getMangaUpdate, ...)
+    instead of the deprecated RxJava 1 helpers, so it no longer relies on
+    ParsedHttpSource-style plumbing;
+  - its own package name, so both builds can be installed side by side (an app that
+    only understands 1.4 keeps using the other one);
+  - tachiyomix.extensionLib = 1.6 tells the app which API it was compiled against.
+
+  The source id is intentionally the same as the 1.4 build's (same name / lang /
+  versionId), so a library entry keeps pointing at the same source after switching
+  between the two builds.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="tachiyomi.extension" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Tachiyomi: E-Hentai">
+
+        <!-- Distinguishes this build from the 1.4 one in the install list. The source
+             itself is still named "E-Hentai" (that name, lang and versionId make the
+             source id, so both builds share one library entry). -->
+        <meta-data
+            android:name="tachiyomix.name"
+            android:value="E-Hentai (1.6)" />
+
+        <!-- Relative to the package: eu.kanade.tachiyomi.extension.en.ehentai.v16.Ehentai -->
+        <meta-data
+            android:name="tachiyomi.extension.class"
+            android:value=".Ehentai" />
+
+        <meta-data
+            android:name="tachiyomi.extension.nsfw"
+            android:value="1" />
+
+        <!-- ContentWarning: SAFE=0, MIXED=1, NSFW=2 -->
+        <meta-data
+            android:name="tachiyomix.contentWarning"
+            android:value="2" />
+
+        <meta-data
+            android:name="tachiyomix.extensionLib"
+            android:value="1.6" />
+
+    </application>
+
+</manifest>
