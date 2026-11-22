@@ -125,9 +125,16 @@ class EhentaiPreferences(private val preferences: SharedPreferences) {
     val titleLanguage: String
         get() = preferences.getString(PREF_TITLE_LANGUAGE, TITLE_LANGUAGE_LIST) ?: TITLE_LANGUAGE_LIST
 
-    /** Delay between page-type requests (list / gallery / viewer), 0 = disabled. */
+    /**
+     * Minimum gap between requests to the site (list / gallery / viewer / original
+     * image downloads), 0 = disabled. Applied by the interceptor to every
+     * e-hentai.org / exhentai.org request, whichever build makes it.
+     */
     val requestIntervalMs: Long
-        get() = preferences.getString(PREF_REQUEST_INTERVAL, "0")?.toLongOrNull() ?: 0L
+        get() = preferences.getString(
+            PREF_REQUEST_INTERVAL,
+            Constants.DEFAULT_REQUEST_INTERVAL_MS.toString(),
+        )?.toLongOrNull() ?: Constants.DEFAULT_REQUEST_INTERVAL_MS
 
     fun isExhentai(): Boolean = domainValue == DOMAIN_EXHENTAI
 
@@ -218,10 +225,11 @@ class EhentaiPreferences(private val preferences: SharedPreferences) {
         ListPreference(context).apply {
             key = PREF_REQUEST_INTERVAL
             title = "请求间隔 (Request interval)"
-            summary = "页面类请求（列表/详情/查看页）之间的等待时间，用于避免 429；图片下载不受影响"
-            entries = arrayOf("无（默认）", "0.5 秒", "1 秒", "2 秒")
-            entryValues = arrayOf("0", "500", "1000", "2000")
-            setDefaultValue("0")
+            summary = "对 e-hentai.org / exhentai.org 的请求最小间隔（列表、详情、查看页、原图下载），" +
+                "所有并发下载共用；图片 CDN 不受影响。站点按 IP 限流，下载较多时建议 1–2 秒"
+            entries = arrayOf("无", "0.25 秒", "0.5 秒（默认）", "1 秒", "2 秒")
+            entryValues = arrayOf("0", "250", "500", "1000", "2000")
+            setDefaultValue(Constants.DEFAULT_REQUEST_INTERVAL_MS.toString())
         }.let { screen.addPreference(it) }
     }
 }

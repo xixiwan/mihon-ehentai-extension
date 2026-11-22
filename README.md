@@ -9,7 +9,7 @@ sources" option enabled.
 
   | | 1.4 版 | 1.6 版 |
   |---|---|---|
-  | APK | `apk/tachiyomi-en.ehentai-v1.4.6.apk` | `apk/tachiyomi-en.ehentai-v1.6.0.apk` |
+  | APK | `apk/tachiyomi-en.ehentai-v1.4.7.apk` | `apk/tachiyomi-en.ehentai-v1.6.0.apk` |
   | 包名 | `…en.ehentai` | `…en.ehentai.v16` |
   | extensions-lib | **1.4**（经典 Observable API） | **1.6**（suspend API） |
   | 适用 | Mihon、Tachimanga、旧 Tachiyomi 分支 | 仅 Mihon 0.20+ |
@@ -32,7 +32,8 @@ sources" option enabled.
 | 阅读/下载 | 惰性解析图片地址（单页 ≈ 1 次查看页请求 + 1 次图片请求）；支持 >20 页大画廊（`?p=N` 翻页收集） |
 | 原图 | 查看页 `/fullimg/` 链接，需要有效登录 Cookie，失败自动回退标准图 |
 | 域名切换 | e-hentai.org（默认）/ exhentai.org（需登录 Cookie）/ 自定义镜像 |
-| 请求节制 | 可选页面请求间隔（0.5s / 1s / 2s），图片下载不受限 |
+| 请求节制 | 对站点请求统一节流（默认 0.5s，可选 0 / 0.25 / 1 / 2 秒，所有并发下载共用）；查看页→图片地址缓存 30 分钟；图片 CDN 不受限 |
+| 限流识别 | 识别站点封禁页 / 图片配额 / sad panda，429/503/509 自动退避重试，报错里给出可执行的建议 |
 
 ## 安装 (Install)
 
@@ -77,42 +78,9 @@ Mihon 0.20+ / Tachimanga 都只从**扩展仓库**安装（0.20.4 起扩展页�
    > 想让列表也是日语，请在 e-hentai 账号设置里打开「日语标题」，然后保持「跟随列表」即可两处一致。
 8. **图片质量** — 标准图（默认）/ 原图（需有效 Cookie）；
 9. **预解析图片地址** — 默认关；开启后进入阅读前即解析全部图片（大画廊变慢）；
-10. **请求间隔** — 页面类请求节流，默认无。
-
-## 构建 (Build)
-
-### 离线构建（本机可用，推荐；不联网）
-
-本工作区没有外网，Gradle 拿不到 JitPack/Google/Maven 上的依赖，所以两个 APK 都由
-`offline/` 下的一组脚本直接调用「Android SDK build-tools + 本地缓存里的 Kotlin 编译器」产出，
-依赖 jar 在 `offline/libs/`（都是 compileOnly，不打进 APK）：
-
-```powershell
-pwsh -NoProfile -File offline\build-api16.ps1   # 用 mihon-0.21.2 源码编出 extensions-lib 1.6 的编译期 API
-pwsh -NoProfile -File offline\build-v14.ps1     # 1.4 版 -> apk/tachiyomi-en.ehentai-v1.4.6.apk
-pwsh -NoProfile -File offline\build-v16.ps1     # 1.6 版 -> apk/tachiyomi-en.ehentai-v1.6.0.apk
-pwsh -NoProfile -File offline\verify-repo.ps1   # 校验签名指纹 + 三个索引与 APK 是否一致
-```
-
-两个 APK 都用 `keystore/debug.keystore` 签名（v1+v2），所以仓库里公布的**同一个**签名指纹对两者都成立。
-
-### Gradle（需要网络）
-
-```bash
-./gradlew :ehentai:assembleRelease      # 1.4 版
-./gradlew :ehentai-v16:assembleRelease  # 1.6 版（extensions-lib 1.6 由 JitPack 提供）
-./gradlew :ehentai:testDebugUnitTest    # 解析/筛选单测（离线可跑）
-```
-
-环境要求：
-
-- JDK 17+（本工程在 JDK 25 上验证）
-- Android SDK（`compileSdk 36`、`minSdk 21`、build-tools 36；`local.properties` 或 `ANDROID_HOME` 指定 SDK 路径）
-- 网络能访问 `google()` / `mavenCentral()` / `jitpack.io`
-- 国内网络不可直连时请配置代理：`GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890"`
-
-> 本仓库构建时用 `GRADLE_USER_HOME=<项目根>/.gradle-home` 把 Gradle 缓存留在项目内，并把调试签名密钥放在
-> `keystore/debug.keystore`（仅用于本地安装；发布扩展仓库时应换成正式签名）。
+10. **请求间隔** — 对 e-hentai.org / exhentai.org 的请求统一节流（列表、详情、查看页、原图下载），
+    默认 **0.5 秒**，可选 0 / 0.25 / 1 / 2 秒。间隔由所有并发下载共用；图片 CDN 不受影响。
+    站点按 IP 限流，下载较多时建议 1–2 秒。
 
 ## 已知限制 (Known limitations)
 
@@ -124,10 +92,14 @@ pwsh -NoProfile -File offline\verify-repo.ps1   # 校验签名指纹 + 三个索
 - **图片 CDN 校验 Referer**：图片请求带查看页 Referer；图片 URL 带 `keystamp` 时效参数，过期（通常几小时）后需重新解析，属站点正常行为。
 - **搜索分页为游标制**：新版站点忽略 `page=N`，改用 `next=`/`prev=` 游标；本扩展在会话内记住上一页游标。
   若应用进程被杀后直接翻到第 2 页，会回退到第 1 页（不会崩溃）。
-- **大画廊**：`getPageList` 串行抓取 `?p=N` 缩略图页（每页 20 张），网络差时较慢；建议开请求间隔避免 429。
+- **站点按 IP 限流**：下载/阅读时每张图都要请求一次查看页，请求过多会触发封禁或图片配额
+  （`excessive pageloads` / `sad panda`）。v1.4.7 起默认 0.5 秒间隔、429/503/509 退避重试、查看页地址缓存
+  30 分钟；批量下载时建议把间隔调到 1–2 秒，并降低应用里的并发下载数。封禁页/配额页会被识别成明确报错，
+  不再表现为「没有图片」。
+- **大画廊**：`getPageList` 串行抓取 `?p=N` 缩略图页（每页 20 张），带总耗时预算与重复页保护，网络差时较慢。
 - **副标题的写入时机**：另一个标题是在**解析详情页时**写进简介的，所以已经躺在书架里的条目
   要点进详情页刷新一次才会出现；插件无法批量改写已入库的记录。
-- 站点会改版：所有选择器集中在 `Constants.kt`，更新时改一处即可；改版对照方法见 `VERIFICATION.md`。
+- 站点会改版：所有选择器集中在 `Constants.kt`，更新时改一处即可。
 
 ## 代码结构
 
@@ -137,23 +109,18 @@ ehentai/src/main/kotlin/eu/kanade/tachiyomi/extension/en/ehentai/   # 与版本�
 ├── EhentaiParsers.kt     # 纯解析函数（Jsoup），可单测
 ├── EhentaiFilters.kt     # 筛选定义 + buildSearchParams 纯函数
 ├── EhentaiPreferences.kt # 偏好读写 + setupPreferenceScreen
-├── EhentaiInterceptor.kt # UA / 登录 Cookie 拦截器（仅本站域名）
-└── Constants.kt          # 域名/偏好键/分类位掩码/选择器集中管理
+├── EhentaiInterceptor.kt # UA / 登录 Cookie / 全局限流拦截器（仅本站域名）
+├── EhentaiNetworking.kt  # 全局限流器、封禁/配额页识别、查看页图片地址缓存、错误文案
+└── Constants.kt          # 域名/偏好键/分类位掩码/选择器/限流参数集中管理
 
 ehentai-v16/src/main/kotlin/eu/kanade/tachiyomi/extension/en/ehentai/v16/
 └── Ehentai.kt            # 1.6 主类（suspend API 接线；上面那批文件原样复用，只排除 1.4 主类）
 
-offline/                  # 不联网的构建与校验脚本（见「构建」）
 ```
 
 1.6 版把每个 1.4 的 `xxxRequest/xxxParse` 对接到 `suspend` 接口（`getPopularManga` /
 `getSearchManga` / `getMangaUpdate` / `getPageList` / `getImageUrl`），解析、筛选、偏好、拦截器
 一行都没复制；站点改版仍然只改 `Constants.kt` + `EhentaiParsers.kt`。
-
-## 站点实测记录
-
-站点结构核对、参数语义（`f_cats` 排除掩码、游标分页、新日期格式等）与文档差异，见
-[`VERIFICATION.md`](VERIFICATION.md)。
 
 ## 致谢 / Credits
 

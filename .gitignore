@@ -17,6 +17,14 @@ _ref/
 .codegraph/
 mihon-*.zip
 
-# 离线构建中间产物
-offline/build/
+# 工具运行时状态（不发布）
+.omc/
+
+# 本地构建/抓取工具与实测记录（不发布，仅本地保留）
+offline/
+tools/
+VERIFICATION.md
+_说明.md
+
+# 构建中间产物
 *.idsig

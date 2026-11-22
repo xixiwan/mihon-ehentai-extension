@@ -3,9 +3,7 @@ package eu.kanade.tachiyomi.extension.en.ehentai
 /**
  * Centralized constants for the E-Hentai extension.
  *
- * Site structure was verified against the live site on 2026-08-15
- * (see VERIFICATION.md at the project root for the full record and
- * any differences from older documentation).
+ * Site structure was verified against the live site on 2026-08-15.
  */
 object Constants {
 
@@ -96,6 +94,34 @@ object Constants {
 
     /** Safety cap for huge galleries (20_000 pages at 20/page). */
     const val MAX_THUMB_PAGES = 1000
+
+    // ------------------------------------------------------------------
+    // Rate limiting & resilience
+    //
+    // E-Hentai throttles by IP: downloads resolve one viewer page per image, so a
+    // few concurrent downloads can look like harvesting software and get the IP
+    // banned ("excessive pageloads"). A non-zero default interval keeps the
+    // request rate low enough without making reading feel slow; users can still
+    // set 0 in the preferences.
+    // ------------------------------------------------------------------
+    const val DEFAULT_REQUEST_INTERVAL_MS = 500L
+
+    /** Retries for rate-limit style HTTP answers (after the first attempt). */
+    const val MAX_REQUEST_RETRIES = 2
+    const val RETRY_BASE_DELAY_MS = 1_000L
+    const val RETRY_MAX_DELAY_MS = 10_000L
+
+    fun isRetryableHttpCode(code: Int): Boolean = code == 429 || code == 503 || code == 509
+
+    /** Viewer page -> image URL cache lifetime (inside the site's `keystamp` window). */
+    const val VIEWER_IMAGE_CACHE_TTL_MS = 30L * 60L * 1000L
+    const val VIEWER_IMAGE_CACHE_MAX_ENTRIES = 2_000
+
+    /** Safety budget for resolving one gallery's thumbnail pages. */
+    const val PAGE_LIST_TIME_BUDGET_MS = 120_000L
+
+    /** Only the head of a page is inspected for throttle notices. */
+    const val SITE_BLOCK_SCAN_LIMIT = 8 * 1024
 
     // ------------------------------------------------------------------
     // HTML selectors (centralized so a site redesign only touches this file)

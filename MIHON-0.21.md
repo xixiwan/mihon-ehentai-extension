@@ -48,8 +48,8 @@ repo.json     : "meta".signingKeyFingerprint: ""
 | 包名 | `eu.kanade.tachiyomi.extension.en.ehentai` | `eu.kanade.tachiyomi.extension.en.ehentai.v16` |
 | extensions-lib | 1.4（经典 RxJava `Observable` API） | 1.6（suspend API，`tachiyomix.extensionLib = 1.6`） |
 | 适用 | Mihon、Tachimanga、旧 Tachiyomi 分支 | 仅 Mihon 0.20+（0.21.2 已核对） |
-| versionCode / Name | 6 / `1.4.6` | 1 / `1.6.0` |
-| APK | `apk/tachiyomi-en.ehentai-v1.4.6.apk` | `apk/tachiyomi-en.ehentai-v1.6.0.apk` |
+| versionCode / Name | 7 / `1.4.7` | 1 / `1.6.0` |
+| APK | `apk/tachiyomi-en.ehentai-v1.4.7.apk` | `apk/tachiyomi-en.ehentai-v1.6.0.apk` |
 | 源 id | `57122881048805941`（lang+name+versionId 生成） | **相同**，见下 |
 
 **为什么包名必须不同**：Android 靠包名区分应用，包名相同就是「同一扩展的两个版本」，后装的会覆盖先装的。
@@ -76,7 +76,9 @@ repo.json     : "meta".signingKeyFingerprint: ""
 
 ## 四、你要做的（发布清单）
 
-1. 提交并 push 这些改动（新增 `ehentai-v16/`、`offline/`，更新三个 json、`icon/…v16.png`、README）。
+1. 提交并 push 这些改动（新增 `ehentai-v16/`，更新三个 json、`icon/…v16.png`、README）。
+   构建脚本 `offline/`、抓取脚本 `tools/` 与实测记录 `VERIFICATION.md` 仅保留在本地，不入库。
+   发版时照常建 GitHub Release 并上传 APK（仓库 `apk/` 里同时保留一份，供 Tachimanga 走相对路径）。
 2. `index.v2.json` 里 1.6 那条的 `apkUrl` 现在指向
    `https://raw.githubusercontent.com/xixiwan/mihon-ehentai-extension/main/apk/tachiyomi-en.ehentai-v1.6.0.apk`
    —— push 完立刻可用。若你想像 1.4.6 那样走 Release 资产，建一个 `v1.6.0` Release、上传这个 APK，

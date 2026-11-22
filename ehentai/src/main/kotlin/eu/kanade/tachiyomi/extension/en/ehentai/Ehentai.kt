@@ -19,7 +19,6 @@ import androidx.preference.PreferenceScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * E-Hentai (e-hentai.org) source for Mihon / Tachimanga / Tachiyomi forks.
@@ -32,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong
  * and other apps — that mismatch shows up as `java.lang.VerifyError` when
  * loading the class.
  *
- * Site facts (verified 2026-08-15, see VERIFICATION.md):
+ * Site facts (verified 2026-08-15):
  * - list/search/popular pages share one row structure (`table.itg tr` rows);
  * - search pagination is cursor based (`next`/`prev` parameters) — `page=N`
  *   is ignored by the server, so the cursor of the previous request is reused;
@@ -97,8 +96,12 @@ class Ehentai : HttpSource(), ConfigurableSource {
         return if (start >= 0) url.substring(start) else url
     }
 
-    /** Timestamp of the last page-type request, for the request-interval preference. */
-    private val lastPageRequestAt = AtomicLong(0L)
+    /**
+     * Viewer page -> image URL, so re-reading a chapter or retrying a download does
+     * not request the same viewer page again. Bounded and TTL'd (see
+     * [ViewerImageCache]); the site's image URLs stay valid for hours.
+     */
+    private val imageUrlCache = ViewerImageCache()
 
     // ------------------------------------------------------------------
     // Popular
@@ -191,8 +194,11 @@ class Ehentai : HttpSource(), ConfigurableSource {
     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> = Observable.fromCallable {
         val galleryUrl = "$baseUrl${chapter.url}"
         val viewerUrls = ArrayList<String>()
+        val seen = HashSet<String>()
         var thumbnailPage = 0
         var pageCount = -1
+        var expectedThumbPages = -1
+        val startedAt = System.currentTimeMillis()
 
         while (true) {
             val url = if (thumbnailPage == 0) galleryUrl else "$galleryUrl?p=$thumbnailPage"
@@ -200,14 +206,23 @@ class Ehentai : HttpSource(), ConfigurableSource {
             val doc = Jsoup.parse(html, url)
             if (thumbnailPage == 0) {
                 pageCount = parsePageCount(doc)
+                expectedThumbPages = if (pageCount > 0) {
+                    (pageCount + Constants.THUMBNAILS_PER_PAGE - 1) / Constants.THUMBNAILS_PER_PAGE
+                } else {
+                    -1
+                }
             }
-            val links = parseViewerLinks(doc)
-            viewerUrls.addAll(links)
+            // Only new links count: if the site answers `?p=N` with the same page
+            // again, the loop must stop instead of requesting up to the page cap.
+            val newLinks = parseViewerLinks(doc).filter { seen.add(it) }
+            viewerUrls.addAll(newLinks)
             thumbnailPage++
 
             if (pageCount > 0 && viewerUrls.size >= pageCount) break
-            if (links.isEmpty()) break
+            if (newLinks.isEmpty()) break
             if (thumbnailPage > Constants.MAX_THUMB_PAGES) break
+            if (expectedThumbPages > 0 && thumbnailPage > expectedThumbPages) break
+            if (System.currentTimeMillis() - startedAt > Constants.PAGE_LIST_TIME_BUDGET_MS) break
         }
 
         val preResolve = prefs.preResolveImages
@@ -227,6 +242,19 @@ class Ehentai : HttpSource(), ConfigurableSource {
         return links.mapIndexed { index, viewerUrl -> Page(index, url = viewerUrl) }
     }
 
+    /**
+     * Resolves the image URL of a viewer page.
+     *
+     * Overriding the observable (instead of relying on [imageUrlRequest] /
+     * [imageUrlParse]) puts every viewer-page request on the cached, throttled,
+     * retrying path of [fetchPageHtml] — this is the request E-Hentai sees once
+     * per image while reading or downloading.
+     */
+    override fun fetchImageUrl(page: Page): Observable<String> =
+        Observable.fromCallable { resolveImageUrl(page) }
+
+    // Kept for clients that drive the lower-level pair directly; the normal path
+    // is fetchImageUrl above.
     override fun imageUrlRequest(page: Page): Request = GET(page.url, pageHeaders())
 
     override fun imageUrlParse(response: Response): String {
@@ -236,18 +264,32 @@ class Ehentai : HttpSource(), ConfigurableSource {
         return parseImageUrl(doc, wantOriginal)
     }
 
-    private fun resolveImageUrl(page: Page): String {
-        val html = fetchPageHtml(page.url)
-        val doc = Jsoup.parse(html, page.url)
+    private fun resolveImageUrl(page: Page): String = resolveImageUrl(page.url)
+
+    private fun resolveImageUrl(viewerUrl: String): String {
         val wantOriginal = prefs.wantOriginal && prefs.cookie.isNotEmpty()
-        return parseImageUrl(doc, wantOriginal)
+        // Quality is part of the key: the same viewer page yields a different URL
+        // for standard and original images.
+        val cacheKey = (if (wantOriginal) "original|" else "standard|") + viewerUrl
+        imageUrlCache.get(cacheKey)?.let { return it }
+
+        val html = fetchPageHtml(viewerUrl)
+        val doc = Jsoup.parse(html, viewerUrl)
+        val imageUrl = parseImageUrl(doc, wantOriginal)
+        imageUrlCache.put(cacheKey, imageUrl)
+        return imageUrl
     }
 
     override fun imageRequest(page: Page): Request {
+        val imageUrl = page.imageUrl
+            ?: throw Exception(
+                "No image URL resolved for ${page.url}. Open the chapter again so the " +
+                    "source can resolve the image address first.",
+            )
         val headers = Headers.Builder()
             .add("Referer", page.url)
             .build()
-        return GET(page.imageUrl!!, headers)
+        return GET(imageUrl, headers)
     }
 
     // ------------------------------------------------------------------
@@ -272,25 +314,43 @@ class Ehentai : HttpSource(), ConfigurableSource {
 
     /**
      * Fetches a page-type resource (list / gallery / viewer) as a string.
-     * Applies the exhentai cookie check, the request-interval throttle and
-     * a page Referer. Image downloads do NOT go through this helper.
+     *
+     * The request is throttled by the interceptor (every e-hentai.org /
+     * exhentai.org request is), retried with backoff when the site answers
+     * 429/503/509, and rejected when the body is one of the site's throttle
+     * pages (IP ban / image quota / sad panda) — otherwise those pages parse as
+     * "empty" and the user only sees a generic failure.
      */
     private fun fetchPageHtml(url: String): String {
         checkExhentaiAccess()
-        throttlePageRequest()
-        return try {
-            client.newCall(GET(url, pageHeaders())).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}")
-                }
-                response.body.string()
+        var attempt = 0
+        while (true) {
+            val response = try {
+                client.newCall(GET(url, pageHeaders())).execute()
+            } catch (e: Exception) {
+                throw Exception(networkErrorMessage(url, e.message ?: e.javaClass.simpleName), e)
             }
-        } catch (e: Exception) {
-            throw Exception(
-                "Failed to fetch $url (${e.message}). Check your network connection and the " +
-                    "User-Agent / 登录 Cookie settings of the E-Hentai source.",
-                e,
-            )
+            var retryAfterMs = -1L
+            try {
+                if (!response.isSuccessful) {
+                    if (Constants.isRetryableHttpCode(response.code) &&
+                        attempt < Constants.MAX_REQUEST_RETRIES
+                    ) {
+                        retryAfterMs = retryDelayMs(response.header("Retry-After"), attempt)
+                    } else {
+                        throw Exception(httpErrorMessage(response.code, url))
+                    }
+                } else {
+                    val html = response.body.string()
+                    detectSiteBlock(html)?.let { throw Exception(siteBlockErrorMessage(it, url)) }
+                    return html
+                }
+            } finally {
+                // Close before backing off so a held connection is not kept during the sleep.
+                response.close()
+            }
+            attempt++
+            Thread.sleep(retryAfterMs)
         }
     }
 
@@ -308,23 +368,4 @@ class Ehentai : HttpSource(), ConfigurableSource {
         }
     }
 
-    /**
-     * Simple throttle between page-type requests (list / gallery / viewer).
-     * The first request after a pause is not delayed; subsequent ones wait so
-     * that the gap between request starts is at least the configured interval.
-     */
-    private fun throttlePageRequest() {
-        val intervalMs = prefs.requestIntervalMs
-        if (intervalMs <= 0L) return
-        while (true) {
-            val now = System.currentTimeMillis()
-            val last = lastPageRequestAt.get()
-            val waitMs = intervalMs - (now - last)
-            if (waitMs <= 0L) {
-                if (lastPageRequestAt.compareAndSet(last, now)) return
-            } else {
-                Thread.sleep(waitMs)
-            }
-        }
-    }
 }
